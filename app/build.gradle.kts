@@ -41,4 +41,5 @@ dependencies {
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
     implementation("com.google.mlkit:translate:17.0.2")
+    implementation("com.google.mlkit:language-id:17.0.4")
 }

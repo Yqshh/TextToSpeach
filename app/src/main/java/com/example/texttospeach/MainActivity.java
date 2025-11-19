@@ -1,16 +1,19 @@
 package com.example.texttospeach;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
+import android.speech.RecognizerIntent;
+import android.util.Log;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
-import android.util.Log;
 import android.widget.Toast;
 
-
+import java.util.ArrayList;
 import java.util.Locale;
 
 import com.google.mlkit.nl.translate.Translator;
@@ -20,14 +23,18 @@ import com.google.mlkit.nl.translate.TranslateLanguage;
 
 public class MainActivity extends Activity {
 
+    private static final int VOICE_REQUEST_CODE = 100;
+
     private Button speakNowButton;
     private Button translateButton;
-    private Button startMusicButton;
-    private Button stopMusicButton;
+    private Button toggleMusicButton;
+    private Button voiceInputButton;
     private EditText editText;
     private Spinner langSpinner;
     private TTSManager ttsManager;
     private MediaPlayer mediaPlayer;
+    private boolean isPlaying = false; // состояние музыки
+    private int lastPosition = 0;      // позиция воспроизведения
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,19 +43,19 @@ public class MainActivity extends Activity {
 
         editText = findViewById(R.id.input_text);
         speakNowButton = findViewById(R.id.speak_now);
-        translateButton = findViewById(R.id.translate_btn); // новая кнопка
-        startMusicButton = findViewById(R.id.start_music);
-        stopMusicButton = findViewById(R.id.stop_music);
+        translateButton = findViewById(R.id.translate_btn);
+        toggleMusicButton = findViewById(R.id.toggle_music);
+        voiceInputButton = findViewById(R.id.voice_input_btn);
         langSpinner = findViewById(R.id.lang_spinner);
 
         ttsManager = new TTSManager();
 
-        // Инициализация MediaPlayer с музыкой из res/raw/music.mp3
+        // Инициализация MediaPlayer
         mediaPlayer = MediaPlayer.create(this, R.raw.music);
         mediaPlayer.setLooping(true);
         mediaPlayer.setVolume(0.3f, 0.3f);
 
-        // Кнопка для озвучивания текста
+        // Озвучивание текста
         speakNowButton.setOnClickListener(v -> {
             String text = editText.getText().toString();
             String selectedLang = langSpinner.getSelectedItem().toString();
@@ -67,7 +74,7 @@ public class MainActivity extends Activity {
             }, 100);
         });
 
-        // Кнопка для перевода текста
+        // Перевод текста
         translateButton.setOnClickListener(v -> {
             String text = editText.getText().toString();
             String selectedLang = langSpinner.getSelectedItem().toString();
@@ -76,16 +83,22 @@ public class MainActivity extends Activity {
             String targetLang;
             Locale targetLocale;
 
+            ArrayAdapter adapter = (ArrayAdapter) langSpinner.getAdapter();
+
             if (selectedLang.equals("Русский")) {
                 sourceLang = TranslateLanguage.RUSSIAN;
                 targetLang = TranslateLanguage.ENGLISH;
                 targetLocale = Locale.US;
-                langSpinner.setSelection(0);
+
+                int pos = adapter.getPosition("English");
+                langSpinner.setSelection(pos);
             } else {
                 sourceLang = TranslateLanguage.ENGLISH;
                 targetLang = TranslateLanguage.RUSSIAN;
                 targetLocale = new Locale("ru", "RU");
-                langSpinner.setSelection(1);
+
+                int pos = adapter.getPosition("Русский");
+                langSpinner.setSelection(pos);
             }
 
             TranslatorOptions options = new TranslatorOptions.Builder()
@@ -99,7 +112,7 @@ public class MainActivity extends Activity {
             translator.downloadModelIfNeeded()
                     .addOnSuccessListener(unused -> {
                         Log.d("DEBUG", "Модель успешно загружена");
-                        //Toast.makeText(MainActivity.this, "Модель загружена", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "Модель загружена", Toast.LENGTH_SHORT).show();
 
                         translator.translate(text)
                                 .addOnSuccessListener(translatedText -> {
@@ -121,21 +134,53 @@ public class MainActivity extends Activity {
                     });
         });
 
-
-        // Кнопка для запуска музыки
-        startMusicButton.setOnClickListener(v -> {
-            if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
-                mediaPlayer.start();
+        // Управление музыкой одной кнопкой (с запоминанием позиции)
+        toggleMusicButton.setOnClickListener(v -> {
+            if (mediaPlayer != null) {
+                if (isPlaying) {
+                    // Сохраняем позицию перед паузой
+                    lastPosition = mediaPlayer.getCurrentPosition();
+                    mediaPlayer.pause();
+                    toggleMusicButton.setText("Включить музыку");
+                    isPlaying = false;
+                } else {
+                    // Восстанавливаем позицию
+                    mediaPlayer.seekTo(lastPosition);
+                    mediaPlayer.start();
+                    toggleMusicButton.setText("Выключить музыку");
+                    isPlaying = true;
+                }
             }
         });
 
-        // Кнопка для остановки музыки
-        stopMusicButton.setOnClickListener(v -> {
-            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-                mediaPlayer.pause();
-                mediaPlayer.seekTo(0);
+        // Голосовой ввод
+        voiceInputButton.setOnClickListener(v -> startVoiceInput());
+    }
+
+    private void startVoiceInput() {
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Скажите текст...");
+
+        try {
+            startActivityForResult(intent, VOICE_REQUEST_CODE);
+        } catch (Exception e) {
+            Toast.makeText(this, "Голосовой ввод недоступен", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == VOICE_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
+            ArrayList<String> result = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+            if (result != null && !result.isEmpty()) {
+                editText.setText(result.get(0)); // вставляем распознанный текст
             }
-        });
+        }
     }
 
     @Override
