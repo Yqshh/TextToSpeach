@@ -19,11 +19,27 @@
         android:entries="@array/lang_array"
         android:layout_marginBottom="20dp"/>
 
-    <Button
-        android:id="@+id/speak_now"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Озвучить" />
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="16dp">
+
+        <Button
+            android:id="@+id/speak_now"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Озвучить"/>
+
+        <Button
+            android:id="@+id/translate_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Перевести"
+            android:layout_marginStart="16dp"/>
+
+    </LinearLayout>
 
     <Button
         android:id="@+id/start_music"
