@@ -16,6 +16,8 @@ import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.Locale;
 
+import com.google.mlkit.nl.languageid.LanguageIdentification;
+import com.google.mlkit.nl.languageid.LanguageIdentifier;
 import com.google.mlkit.nl.translate.Translator;
 import com.google.mlkit.nl.translate.TranslatorOptions;
 import com.google.mlkit.nl.translate.Translation;
@@ -74,77 +76,21 @@ public class MainActivity extends Activity {
             }, 100);
         });
 
-        // Перевод текста
+        // Перевод текста вручную
         translateButton.setOnClickListener(v -> {
             String text = editText.getText().toString();
-            String selectedLang = langSpinner.getSelectedItem().toString();
-
-            String sourceLang;
-            String targetLang;
-            Locale targetLocale;
-
-            ArrayAdapter adapter = (ArrayAdapter) langSpinner.getAdapter();
-
-            if (selectedLang.equals("Русский")) {
-                sourceLang = TranslateLanguage.RUSSIAN;
-                targetLang = TranslateLanguage.ENGLISH;
-                targetLocale = Locale.US;
-
-                int pos = adapter.getPosition("English");
-                langSpinner.setSelection(pos);
-            } else {
-                sourceLang = TranslateLanguage.ENGLISH;
-                targetLang = TranslateLanguage.RUSSIAN;
-                targetLocale = new Locale("ru", "RU");
-
-                int pos = adapter.getPosition("Русский");
-                langSpinner.setSelection(pos);
-            }
-
-            TranslatorOptions options = new TranslatorOptions.Builder()
-                    .setSourceLanguage(sourceLang)
-                    .setTargetLanguage(targetLang)
-                    .build();
-            Translator translator = Translation.getClient(options);
-
-            Log.d("DEBUG", "Начинаем загрузку модели: " + sourceLang + " -> " + targetLang);
-
-            translator.downloadModelIfNeeded()
-                    .addOnSuccessListener(unused -> {
-                        Log.d("DEBUG", "Модель успешно загружена");
-                        Toast.makeText(MainActivity.this, "Модель загружена", Toast.LENGTH_SHORT).show();
-
-                        translator.translate(text)
-                                .addOnSuccessListener(translatedText -> {
-                                    Log.d("DEBUG", "Перевод успешен: " + translatedText);
-                                    editText.setText(translatedText);
-
-                                    ttsManager.init(MainActivity.this, targetLocale);
-                                    ttsManager.speak(translatedText);
-                                })
-                                .addOnFailureListener(e -> {
-                                    Log.e("DEBUG", "Ошибка перевода", e);
-                                    editText.setText("Ошибка перевода: " + e.getMessage());
-                                });
-                    })
-                    .addOnFailureListener(e -> {
-                        Log.e("DEBUG", "Не удалось загрузить модель", e);
-                        Toast.makeText(MainActivity.this, "Ошибка загрузки модели", Toast.LENGTH_SHORT).show();
-                        editText.setText("Не удалось загрузить модель: " + e.getMessage());
-                    });
+            autoTranslateAndSpeak(text);
         });
 
         // Управление музыкой одной кнопкой (с запоминанием позиции)
         toggleMusicButton.setOnClickListener(v -> {
             if (mediaPlayer != null) {
                 if (isPlaying) {
-                    // Сохраняем позицию перед паузой
                     lastPosition = mediaPlayer.getCurrentPosition();
                     mediaPlayer.pause();
                     toggleMusicButton.setText("Включить музыку");
                     isPlaying = false;
                 } else {
-                    // Восстанавливаем позицию
                     mediaPlayer.seekTo(lastPosition);
                     mediaPlayer.start();
                     toggleMusicButton.setText("Выключить музыку");
@@ -178,9 +124,59 @@ public class MainActivity extends Activity {
         if (requestCode == VOICE_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
             ArrayList<String> result = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
             if (result != null && !result.isEmpty()) {
-                editText.setText(result.get(0)); // вставляем распознанный текст
+                String recognizedText = result.get(0);
+                editText.setText(recognizedText);
+                // сразу переводим и озвучиваем
+                autoTranslateAndSpeak(recognizedText);
             }
         }
+    }
+
+    // --- Автоматический перевод и озвучивание ---
+    private void autoTranslateAndSpeak(String text) {
+        if (text == null || text.isEmpty()) return;
+
+        LanguageIdentifier languageIdentifier = LanguageIdentification.getClient();
+        languageIdentifier.identifyLanguage(text)
+                .addOnSuccessListener(languageCode -> {
+                    String sourceLang, targetLang;
+                    Locale targetLocale;
+
+                    if (languageCode.equals("ru")) {
+                        sourceLang = TranslateLanguage.RUSSIAN;
+                        targetLang = TranslateLanguage.ENGLISH;
+                        targetLocale = Locale.US;
+                    } else {
+                        sourceLang = TranslateLanguage.ENGLISH;
+                        targetLang = TranslateLanguage.RUSSIAN;
+                        targetLocale = new Locale("ru", "RU");
+                    }
+
+                    TranslatorOptions options = new TranslatorOptions.Builder()
+                            .setSourceLanguage(sourceLang)
+                            .setTargetLanguage(targetLang)
+                            .build();
+                    Translator translator = Translation.getClient(options);
+
+                    translator.downloadModelIfNeeded()
+                            .addOnSuccessListener(unused -> {
+                                translator.translate(text)
+                                        .addOnSuccessListener(translatedText -> {
+                                            editText.setText(translatedText);
+                                            ttsManager.init(MainActivity.this, targetLocale);
+                                            ttsManager.speak(translatedText);
+                                        })
+                                        .addOnFailureListener(e -> {
+                                            editText.setText("Ошибка перевода: " + e.getMessage());
+                                        });
+                            })
+                            .addOnFailureListener(e -> {
+                                Toast.makeText(this, "Ошибка загрузки модели", Toast.LENGTH_SHORT).show();
+                            });
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(this, "Ошибка определения языка", Toast.LENGTH_SHORT).show();
+                });
     }
 
     @Override
