@@ -54,6 +54,13 @@
         android:layout_height="wrap_content"
         android:text="🎵Включить музыку"/>
 
+    <Button
+        android:id="@+id/voice_input_with_translate_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Голосовой ввод с переводом" />
+
+
 
 
 </LinearLayout>

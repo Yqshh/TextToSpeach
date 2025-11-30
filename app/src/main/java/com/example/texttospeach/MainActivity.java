@@ -6,8 +6,6 @@ import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.speech.RecognizerIntent;
-import android.util.Log;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
@@ -31,12 +29,13 @@ public class MainActivity extends Activity {
     private Button translateButton;
     private Button toggleMusicButton;
     private Button voiceInputButton;
+    private Button voiceInputWithTranslateButton; // NEW: opens separate screen
     private EditText editText;
     private Spinner langSpinner;
     private TTSManager ttsManager;
     private MediaPlayer mediaPlayer;
-    private boolean isPlaying = false; // состояние музыки
-    private int lastPosition = 0;      // позиция воспроизведения
+    private boolean isPlaying = false;
+    private int lastPosition = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,41 +47,34 @@ public class MainActivity extends Activity {
         translateButton = findViewById(R.id.translate_btn);
         toggleMusicButton = findViewById(R.id.toggle_music);
         voiceInputButton = findViewById(R.id.voice_input_btn);
+        voiceInputWithTranslateButton = findViewById(R.id.voice_input_with_translate_btn); // ensure this id exists in layout
         langSpinner = findViewById(R.id.lang_spinner);
 
         ttsManager = new TTSManager();
 
-        // Инициализация MediaPlayer
+        // MediaPlayer init
         mediaPlayer = MediaPlayer.create(this, R.raw.music);
         mediaPlayer.setLooping(true);
         mediaPlayer.setVolume(0.3f, 0.3f);
 
-        // Озвучивание текста
+        // Speak text
         speakNowButton.setOnClickListener(v -> {
             String text = editText.getText().toString();
             String selectedLang = langSpinner.getSelectedItem().toString();
 
-            Locale locale;
-            if (selectedLang.equals("Русский")) {
-                locale = new Locale("ru", "RU");
-            } else {
-                locale = Locale.US;
-            }
-
+            Locale locale = selectedLang.equals("Русский") ? new Locale("ru", "RU") : Locale.US;
             ttsManager.init(MainActivity.this, locale);
 
-            new Handler().postDelayed(() -> {
-                ttsManager.speak(text);
-            }, 100);
+            new Handler().postDelayed(() -> ttsManager.speak(text), 100);
         });
 
-        // Перевод текста вручную
+        // Manual translate (kept working)
         translateButton.setOnClickListener(v -> {
             String text = editText.getText().toString();
             autoTranslateAndSpeak(text);
         });
 
-        // Управление музыкой одной кнопкой (с запоминанием позиции)
+        // Music toggle
         toggleMusicButton.setOnClickListener(v -> {
             if (mediaPlayer != null) {
                 if (isPlaying) {
@@ -99,10 +91,17 @@ public class MainActivity extends Activity {
             }
         });
 
-        // Голосовой ввод
+        // Voice input (kept working, but no auto-translation here)
         voiceInputButton.setOnClickListener(v -> startVoiceInput());
+
+        // NEW: Voice input with auto-translation opens separate activity
+        voiceInputWithTranslateButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, VoiceTranslateActivity.class);
+            startActivity(intent);
+        });
     }
 
+    // Voice input flow (no auto-translate here)
     private void startVoiceInput() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -117,6 +116,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    // Result: only set text; do NOT auto-translate here
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -126,13 +126,12 @@ public class MainActivity extends Activity {
             if (result != null && !result.isEmpty()) {
                 String recognizedText = result.get(0);
                 editText.setText(recognizedText);
-                // сразу переводим и озвучиваем
-                autoTranslateAndSpeak(recognizedText);
+                // intentionally no autoTranslateAndSpeak() here
             }
         }
     }
 
-    // --- Автоматический перевод и озвучивание ---
+    // Manual translate + speak (kept in main screen for Translate button)
     private void autoTranslateAndSpeak(String text) {
         if (text == null || text.isEmpty()) return;
 
@@ -159,24 +158,19 @@ public class MainActivity extends Activity {
                     Translator translator = Translation.getClient(options);
 
                     translator.downloadModelIfNeeded()
-                            .addOnSuccessListener(unused -> {
-                                translator.translate(text)
-                                        .addOnSuccessListener(translatedText -> {
-                                            editText.setText(translatedText);
-                                            ttsManager.init(MainActivity.this, targetLocale);
-                                            ttsManager.speak(translatedText);
-                                        })
-                                        .addOnFailureListener(e -> {
-                                            editText.setText("Ошибка перевода: " + e.getMessage());
-                                        });
-                            })
-                            .addOnFailureListener(e -> {
-                                Toast.makeText(this, "Ошибка загрузки модели", Toast.LENGTH_SHORT).show();
-                            });
+                            .addOnSuccessListener(unused -> translator.translate(text)
+                                    .addOnSuccessListener(translatedText -> {
+                                        editText.setText(translatedText);
+                                        ttsManager.init(MainActivity.this, targetLocale);
+                                        ttsManager.speak(translatedText);
+                                    })
+                                    .addOnFailureListener(e ->
+                                            editText.setText("Ошибка перевода: " + e.getMessage())))
+                            .addOnFailureListener(e ->
+                                    Toast.makeText(this, "Ошибка загрузки модели", Toast.LENGTH_SHORT).show());
                 })
-                .addOnFailureListener(e -> {
-                    Toast.makeText(this, "Ошибка определения языка", Toast.LENGTH_SHORT).show();
-                });
+                .addOnFailureListener(e ->
+                        Toast.makeText(this, "Ошибка определения языка", Toast.LENGTH_SHORT).show());
     }
 
     @Override

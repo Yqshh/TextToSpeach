@@ -1,0 +1,30 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Поле для текста -->
+    <EditText
+        android:id="@+id/voice_input_text"
+        android:layout_width="250dp"
+        android:layout_height="wrap_content"
+        android:hint="Распознанный текст"
+        android:textColor="@android:color/white"
+        android:textSize="18sp"
+        android:gravity="center"
+        android:layout_marginBottom="40dp"
+        android:background="@android:color/transparent" />
+
+    <!-- Простая круглая кнопка -->
+    <Button
+        android:id="@+id/voice_input_btn"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:backgroundTint="@android:color/white"
+        android:text="🎤"
+        android:textSize="24sp"
+        android:textColor="@android:color/white"
+        android:layout_gravity="center" />
+
+</LinearLayout>
